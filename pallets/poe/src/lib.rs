@@ -8,12 +8,6 @@ use sp_std::prelude::*;
 use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, ensure};
 use frame_system::ensure_signed;
 
-#[cfg(test)]
-mod mock;
-
-#[cfg(test)]
-mod tests;
-
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -41,6 +35,7 @@ decl_event!(
 		/// parameters. [something, who]
 		ClaimCreated(AccountId, Vec<u8>),
 		ClaimRevoked(AccountId, Vec<u8>),
+		ClaimTransfered(AccountId, Vec<u8>, AccountId),
 	}
 );
 
@@ -75,7 +70,7 @@ decl_module! {
 		}
 
 		#[weight = 0]
-		pub fn revoke_claim(origin,claim: Vec<u8>) -> dispatch::DispatchResult{
+		pub fn revoke_claim(origin, claim: Vec<u8>) -> dispatch::DispatchResult{
 			let sender = ensure_signed(origin)?;
 			ensure!(Proofs::<T>::contains_key(&claim),Error::<T>::ClaimNotExist);
 			let (owner,_block_number) = Proofs::<T>::get(&claim);
@@ -86,5 +81,21 @@ decl_module! {
 
 			Ok(())
 		}
+
+	    #[weight = 0]
+		pub fn transfer_claim(origin, claim: Vec<u8>, target: <T as frame_system::Trait>::AccountId) {
+            let sender = ensure_signed(origin)?;
+
+            ensure!(Proofs::<T>::contains_key(&claim),Error::<T>::ClaimNotExist);
+
+			let (owner, _block_number) = Proofs::<T>::get(&claim);
+
+            ensure!(owner == sender,Error::<T>::NotClaimOwner);
+
+            Proofs::<T>::mutate(&claim, |v| * v = (target.clone(), frame_system::Module::<T>::block_number()));
+
+            // Emit an event that the claim was created.
+            Self::deposit_event(RawEvent::ClaimTransfered(sender, claim, target));
+        }
 	}
 }
